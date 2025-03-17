@@ -15,19 +15,18 @@ async function seedUsers() {
     );
   `;
 
-  // Use .then() to chain the INSERT operations after table creation.  More reliable.
-  return sql`SELECT 1`.then(() => { // Dummy select to chain correctly.
-      return Promise.all(
-        users.map(async (user) => {
-          const hashedPassword = await bcrypt.hash(user.password, 10);
-          return sql`
-            INSERT INTO users (id, name, email, password)
-            VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword})
-            ON CONFLICT (id) DO NOTHING;
-          `;
-        }),
-      );
-  });
+  const insertedUsers = await Promise.all(
+    users.map(async (user) => {
+      const hashedPassword = await bcrypt.hash(user.password, 10);
+      return sql`
+        INSERT INTO users (id, name, email, password)
+        VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword})
+        ON CONFLICT (id) DO NOTHING;
+      `;
+    }),
+  );
+
+  return insertedUsers;
 }
 
 async function seedInvoices() {
@@ -43,17 +42,17 @@ async function seedInvoices() {
     );
   `;
 
-  return sql`SELECT 1`.then(() => { // Chain correctly
-      return Promise.all(
-        invoices.map(
-          (invoice) => sql`
-            INSERT INTO invoices (customer_id, amount, status, date)
-            VALUES (${invoice.customer_id}, ${invoice.amount}, ${invoice.status}, ${invoice.date})
-            ON CONFLICT (id) DO NOTHING;
-          `,
-        ),
-      );
-  });
+  const insertedInvoices = await Promise.all(
+    invoices.map(
+      (invoice) => sql`
+        INSERT INTO invoices (customer_id, amount, status, date)
+        VALUES (${invoice.customer_id}, ${invoice.amount}, ${invoice.status}, ${invoice.date})
+        ON CONFLICT (id) DO NOTHING;
+      `,
+    ),
+  );
+
+  return insertedInvoices;
 }
 
 async function seedCustomers() {
@@ -68,17 +67,17 @@ async function seedCustomers() {
     );
   `;
 
-  return sql`SELECT 1`.then(() => { //Chain Correctly
-        return Promise.all(
-            customers.map(
-            (customer) => sql`
-                INSERT INTO customers (id, name, email, image_url)
-                VALUES (${customer.id}, ${customer.name}, ${customer.email}, ${customer.image_url})
-                ON CONFLICT (id) DO NOTHING;
-            `,
-            ),
-        );
-    });
+  const insertedCustomers = await Promise.all(
+    customers.map(
+      (customer) => sql`
+        INSERT INTO customers (id, name, email, image_url)
+        VALUES (${customer.id}, ${customer.name}, ${customer.email}, ${customer.image_url})
+        ON CONFLICT (id) DO NOTHING;
+      `,
+    ),
+  );
+
+  return insertedCustomers;
 }
 
 async function seedRevenue() {
@@ -89,32 +88,30 @@ async function seedRevenue() {
     );
   `;
 
-  return sql`SELECT 1`.then(() => { //Chain correctly
-        return Promise.all(
-        revenue.map(
-            (rev) => sql`
-                INSERT INTO revenue (month, revenue)
-                VALUES (${rev.month}, ${rev.revenue})
-                ON CONFLICT (month) DO NOTHING;
-            `,
-        ),
-        );
-  });
+  const insertedRevenue = await Promise.all(
+    revenue.map(
+      (rev) => sql`
+        INSERT INTO revenue (month, revenue)
+        VALUES (${rev.month}, ${rev.revenue})
+        ON CONFLICT (month) DO NOTHING;
+      `,
+    ),
+  );
+
+  return insertedRevenue;
 }
 
 export async function GET() {
   try {
-    // CORRECTED TRANSACTION USAGE
-    await sql.begin(async (tx) => { // Use 'async' and pass 'tx' (for transaction)
-      await seedUsers(); // Use 'await' and the transaction context 'tx'
-      await seedCustomers();
-      await seedInvoices();
-      await seedRevenue();
-    });
-    return Response.json({ message: 'Database seeded successfully' });
+    const result = await sql.begin((sql) => [
+      seedUsers(),
+      seedCustomers(),
+      seedInvoices(),
+      seedRevenue(),
+    ]);
 
-  } catch (error:any) { // Add type annotation to error
-      console.error("Seeding error:", error); // Log the error for debugging!
-      return Response.json({ error: error.message }, { status: 500 }); // Return error message
+    return Response.json({ message: 'Database seeded successfully' });
+  } catch (error) {
+    return Response.json({ error }, { status: 500 });
   }
 }
